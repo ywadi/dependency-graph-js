@@ -24,9 +24,9 @@ It is designed to be lightweight, with zero production dependencies, making it e
 Install the package using npm or pnpm:
 
 ```bash
-npm install dependency-graph
+npm install @ywadi/dependency-graph
 # or
-pnpm add dependency-graph
+pnpm add @ywadi/dependency-graph
 ```
 
 ## Usage
@@ -34,7 +34,7 @@ pnpm add dependency-graph
 Require the library in your project to access the `DependencyGraph` class and the `extractCellsAndRanges` function.
 
 ```javascript
-const { DependencyGraph, extractCellsAndRanges } = require('dependency-graph');
+const { DependencyGraph, extractCellsAndRanges } = require('@ywadi/dependency-graph');
 
 // Using the DependencyGraph
 const graph = new DependencyGraph();
