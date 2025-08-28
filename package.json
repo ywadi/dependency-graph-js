@@ -1,8 +1,26 @@
 {
-  "name": "dependency-graph",
+  "name": "@ywadi/dependency-graph",
   "version": "1.0.0",
   "description": "A dependency graph library with cycle detection and traversal capabilities",
   "main": "lib/index.js",
+  "files": [
+    "lib"
+  ],
+  "author": "Yousef Wadi",
+  "license": "ISC",
+  "bugs": {
+    "url": ""
+  },
+  "homepage": "",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "keywords": [
+    "dependency",
+    "graph",
+    "dependencies"
+  ],
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch"
