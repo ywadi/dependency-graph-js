@@ -1,6 +1,6 @@
 {
   "name": "@ywadi/dependency-graph",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A dependency graph library with cycle detection and traversal capabilities",
   "main": "lib/index.js",
   "files": [
