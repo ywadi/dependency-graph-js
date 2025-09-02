@@ -1,4 +1,4 @@
-const { DependencyGraph } = require('../lib/DependencyGraph.js');
+const DependencyGraph = require('../lib/DependencyGraph.js');
 
 describe('DependencyGraph', () => {
   describe('Initialization', () => {
@@ -177,6 +177,47 @@ describe('DependencyGraph', () => {
     test('should generate a correct string for an empty graph', () => {
       const graph = new DependencyGraph();
       expect(graph.toMermaid()).toBe('graph TD;\n');
+    });
+  });
+
+  describe('serialization and deserialization', () => {
+    it('should serialize and deserialize a graph', () => {
+      const graph = new DependencyGraph();
+      graph.addNode('A');
+      graph.addNode('B');
+      graph.addEdge('A', 'B', 'formula');
+
+      const serialized = graph.serialize();
+      const deserializedGraph = DependencyGraph.deserialize(serialized);
+
+      expect(deserializedGraph.hasNode('A')).toBe(true);
+      expect(deserializedGraph.hasNode('B')).toBe(true);
+      expect(deserializedGraph.getDependents('A', { edgeType: 'formula' })).toEqual(['B']);
+      expect(deserializedGraph.getDependencies('B', { edgeType: 'formula' })).toEqual(['A']);
+    });
+
+    it('should handle an empty graph', () => {
+      const graph = new DependencyGraph();
+      const serialized = graph.serialize();
+      const deserializedGraph = DependencyGraph.deserialize(serialized);
+
+      expect(deserializedGraph.nodes.size).toBe(0);
+      expect(deserializedGraph.edges.size).toBe(0);
+    });
+
+    it('should maintain edge types during serialization/deserialization', () => {
+      const graph = new DependencyGraph();
+      graph.addNode('A');
+      graph.addNode('B');
+      graph.addNode('C');
+      graph.addEdge('A', 'B', 'type1');
+      graph.addEdge('A', 'C', 'type2');
+
+      const serialized = graph.serialize();
+      const deserializedGraph = DependencyGraph.deserialize(serialized);
+
+      expect(deserializedGraph.getDependents('A', { edgeTypes: 'type1' })).toEqual(['B']);
+      expect(deserializedGraph.getDependents('A', { edgeTypes: 'type2' })).toEqual(['C']);
     });
   });
 });

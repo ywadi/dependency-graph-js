@@ -91,6 +91,29 @@ Removes a directed edge between two nodes.
 - **`toNodeId`** (string): The ending node ID.
 - **Returns**: `true` if the edge was removed, `false` if it did not exist.
 
+#### `hasNode(nodeId)`
+
+Checks if a node exists in the graph.
+
+- **`nodeId`** (string): The ID of the node to check.
+- **Returns**: `true` if the node exists, `false` otherwise.
+
+#### `getDependents(nodeId, options)`
+
+Gets the nodes that depend on a given node (its dependents).
+
+- **`nodeId`** (string): The ID of the node.
+- **`options`** (object, optional): Traversal options, same as `traverse`.
+- **Returns**: An array of dependent node IDs.
+
+#### `getDependencies(nodeId, options)`
+
+Gets the nodes that a given node depends on (its dependencies).
+
+- **`nodeId`** (string): The ID of the node.
+- **`options`** (object, optional): Traversal options, same as `traverse`.
+- **Returns**: An array of dependency node IDs.
+
 #### `traverse(startNodeId, options)`
 
 Traverses the graph from a starting node.
@@ -137,6 +160,32 @@ graph TD;
     A -- link --> B;
     B -- link --> C;
 */
+```
+
+#### `serialize()`
+
+Serializes the current graph state into a JSON string, allowing it to be saved and restored later.
+
+- **Returns**: A JSON string representing the graph's nodes and edges.
+
+#### `deserialize(jsonString)`
+
+A static method that creates a new `DependencyGraph` instance from a JSON string.
+
+- **`jsonString`** (string): The JSON string created by the `serialize()` method.
+- **Returns**: A new `DependencyGraph` instance with the deserialized state.
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('A', 'B', 'link');
+
+// Serialize the graph
+const serializedData = graph.serialize();
+
+// Deserialize the graph
+const newGraph = DependencyGraph.deserialize(serializedData);
+console.log(newGraph.hasNode('A')); // true
+console.log(newGraph.getDependents('A')); // ['B']
 ```
 
 ### `extractCellsAndRanges(equation)`
