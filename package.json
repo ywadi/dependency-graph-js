@@ -9,12 +9,12 @@
   "author": "Yousef Wadi",
   "license": "ISC",
   "bugs": {
-    "url": ""
+    "url": "https://github.com/ywadi/dependency-graph-js/issues"
   },
-  "homepage": "",
+  "homepage": "https://github.com/ywadi/dependency-graph-js",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/ywadi/dependency-graph-js.git"
   },
   "keywords": [
     "dependency",
@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "test": "jest",
+    "benchmark": "node benchmarks/DependencyGraph.bench.js",
     "test:watch": "jest --watch"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "@babel/core": "^7.24.0",
     "@babel/preset-env": "^7.24.0",
     "babel-jest": "^29.7.0",
+    "benchmark": "^2.1.4",
     "jest": "^29.7.0"
   },
   "jest": {

@@ -195,6 +195,21 @@ Extracts all unique cell and range references from an Excel formula string.
 - **`equation`** (string): The formula string (e.g., `=SUM(A1:B2)`).
 - **Returns**: An object `{ cells: string[], ranges: string[] }` containing sorted arrays of unique references.
 
+## Benchmarks
+
+Performance benchmarks were run on a graph with 1,000 nodes and ~2,000 edges. The results below show the number of operations per second (higher is better).
+
+| Method                | Operations/sec |
+| --------------------- | -------------- |
+| `addNode`             | ~4,386         |
+| `addEdge`             | ~646           |
+| `traverse (outgoing)` | ~2,000,997     |
+| `getDependents`       | ~1,649,869     |
+| `serialize`           | ~396           |
+| `deserialize`         | ~320           |
+
+*Benchmarks were run on a standard development machine. Results may vary based on hardware.*
+
 ## Development
 
 To work on this project locally, clone the repository and install the development dependencies.
