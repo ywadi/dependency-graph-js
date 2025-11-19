@@ -11,6 +11,7 @@ It is designed to be lightweight, with zero production dependencies, making it e
   - Add and remove nodes and edges dynamically.
   - Traverse the graph using breadth-first search (BFS) or depth-first search (DFS).
   - Build hierarchical tree structures representing graph relationships.
+  - Execute async operations on tree nodes with waterfall-style result passing and parallel sibling execution.
   - Support traversal in both outgoing (dependencies) and incoming (dependents) directions.
   - Filter traversal by edge types.
   - Detect and find circular dependencies.
@@ -184,6 +185,142 @@ const dependentsTree = graph.getTree('D', { direction: 'incoming' });
 
 // Filter by edge type
 const filteredTree = graph.getTree('A', { edgeTypes: 'formula' });
+```
+
+#### `executeOnTree(startNodeId, callback, options)`
+
+Executes an async callback function on each node in the tree, starting from a given node. Sibling nodes execute in parallel, while parent nodes complete before their children execute. Each callback receives the parent's result, enabling waterfall-style async operations on tree structures.
+
+This is particularly useful for:
+- Async data fetching where child nodes need parent results
+- Build pipelines where each step transforms input from parent
+- Spreadsheet-like calculations where cells depend on other cells
+- Resource loading in optimal order
+
+- **`startNodeId`** (string): The node to start from.
+- **`callback`** (async function): Async function called for each node: `(nodeId, parentResult, context) => result`
+  - `nodeId` (string): The current node ID
+  - `parentResult` (any): The value returned by the parent node's callback (null for root)
+  - `context` (object): Contains `{ depth, path, parentNode, edgeType, siblings }`
+  - Returns: Any value that will be passed to children as `parentResult`
+- **`options`** (object, optional):
+  - `direction` ('outgoing' | 'incoming'): Direction to traverse. Defaults to `'outgoing'`.
+  - `edgeTypes` (string | string[]): Edge type(s) to follow. Follows all types if not provided.
+  - `errorStrategy` ('fail-fast' | 'collect' | 'skip-children'): How to handle errors. Defaults to `'fail-fast'`.
+    - `'fail-fast'`: Stop execution and throw on first error
+    - `'collect'`: Continue execution, collect errors in tree structure
+    - `'skip-children'`: Skip children of failed nodes
+  - `maxConcurrency` (number | null): Maximum concurrent executions. Defaults to `null` (unlimited).
+  - `signal` (AbortSignal | null): AbortSignal for cancellation support.
+  - `onProgress` (function | null): Progress callback called after each node: `(nodeId, result) => void`
+- **Returns**: A promise that resolves to a tree object with execution results: `{node, result, error, isCircularRef, children}`
+
+**Example 1: Basic waterfall computation**
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('A', 'B', 'calc');
+graph.addEdge('B', 'C', 'calc');
+
+// Each node multiplies parent result by 2
+const tree = await graph.executeOnTree('A', async (nodeId, parentResult) => {
+  const value = parentResult ? parentResult * 2 : 10; // A starts with 10
+  console.log(`${nodeId} = ${value}`);
+  return value;
+});
+
+// Output:
+// A = 10
+// B = 20
+// C = 40
+
+console.log(tree.result); // 10
+console.log(tree.children[0].result); // 20
+console.log(tree.children[0].children[0].result); // 40
+```
+
+**Example 2: Async data fetching with parallel siblings**
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('user-1', 'posts', 'fetch');
+graph.addEdge('user-1', 'profile', 'fetch');
+graph.addEdge('posts', 'comments', 'fetch');
+
+// Fetch data for each node
+const tree = await graph.executeOnTree('user-1', async (nodeId, parentData, context) => {
+  console.log(`Fetching ${nodeId} at depth ${context.depth}`);
+
+  // Simulate API calls
+  if (nodeId === 'user-1') {
+    return { userId: 1, name: 'John' };
+  }
+  if (nodeId === 'posts') {
+    return await fetchUserPosts(parentData.userId);
+  }
+  if (nodeId === 'profile') {
+    return await fetchUserProfile(parentData.userId);
+  }
+  // ... etc
+});
+
+// posts and profile fetch in parallel, comments waits for posts
+```
+
+**Example 3: Error handling with collect strategy**
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('root', 'task-1', 'process');
+graph.addEdge('root', 'task-2', 'process');
+graph.addEdge('root', 'task-3', 'process');
+
+// Process tasks, some may fail
+const tree = await graph.executeOnTree('root',
+  async (nodeId) => {
+    if (nodeId === 'task-2') {
+      throw new Error('Task 2 failed');
+    }
+    return `${nodeId} completed`;
+  },
+  { errorStrategy: 'collect' }
+);
+
+// Check results
+tree.children.forEach(child => {
+  if (child.error) {
+    console.log(`${child.node} failed:`, child.error.message);
+  } else {
+    console.log(`${child.node}:`, child.result);
+  }
+});
+```
+
+**Example 4: Concurrency limiting**
+
+```javascript
+// Limit to 3 concurrent API calls
+const tree = await graph.executeOnTree('root',
+  async (nodeId) => {
+    return await fetchData(nodeId);
+  },
+  { maxConcurrency: 3 }
+);
+```
+
+**Example 5: Progress tracking**
+
+```javascript
+let completed = 0;
+const tree = await graph.executeOnTree('root',
+  async (nodeId) => processNode(nodeId),
+  {
+    onProgress: (nodeId, result) => {
+      completed++;
+      console.log(`Progress: ${completed} nodes completed`);
+    }
+  }
+);
 ```
 
 #### `hasCircularDependency(options)`

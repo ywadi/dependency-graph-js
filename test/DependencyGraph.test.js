@@ -557,4 +557,409 @@ describe('DependencyGraph', () => {
       });
     });
   });
+
+  describe('executeOnTree', () => {
+    describe('Basic Execution', () => {
+      test('should execute callback on a simple tree', async () => {
+        // A -> B -> C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'C', 'link');
+
+        const results = [];
+        const callback = async (nodeId, parentResult, context) => {
+          results.push({ nodeId, parentResult, depth: context.depth });
+          return `result_${nodeId}`;
+        };
+
+        const tree = await graph.executeOnTree('A', callback);
+
+        expect(results).toHaveLength(3);
+        expect(results[0]).toEqual({ nodeId: 'A', parentResult: null, depth: 0 });
+        expect(results[1]).toEqual({ nodeId: 'B', parentResult: 'result_A', depth: 1 });
+        expect(results[2]).toEqual({ nodeId: 'C', parentResult: 'result_B', depth: 2 });
+
+        expect(tree.node).toBe('A');
+        expect(tree.result).toBe('result_A');
+        expect(tree.children[0].result).toBe('result_B');
+        expect(tree.children[0].children[0].result).toBe('result_C');
+      });
+
+      test('should execute siblings in parallel', async () => {
+        // A -> B
+        // A -> C
+        // A -> D
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('A', 'D', 'link');
+
+        const executionOrder = [];
+        const callback = async (nodeId) => {
+          executionOrder.push(`start_${nodeId}`);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          executionOrder.push(`end_${nodeId}`);
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback);
+
+        // A should start and end first
+        expect(executionOrder[0]).toBe('start_A');
+        expect(executionOrder[1]).toBe('end_A');
+
+        // B, C, D should all start before any of them end (parallel execution)
+        const starts = executionOrder.filter(item => item.startsWith('start_'));
+        const ends = executionOrder.filter(item => item.startsWith('end_'));
+        expect(starts.slice(1)).toEqual(['start_B', 'start_C', 'start_D']);
+        expect(ends.slice(1)).toEqual(['end_B', 'end_C', 'end_D']);
+      });
+
+      test('should pass context information correctly', async () => {
+        // A -> B -> C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('B', 'C', 'type2');
+
+        let contextB, contextC;
+        const callback = async (nodeId, parentResult, context) => {
+          if (nodeId === 'B') contextB = context;
+          if (nodeId === 'C') contextC = context;
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback);
+
+        expect(contextB).toEqual({
+          depth: 1,
+          path: ['A'],
+          parentNode: 'A',
+          edgeType: 'type1',
+          siblings: []
+        });
+
+        expect(contextC).toEqual({
+          depth: 2,
+          path: ['A', 'B'],
+          parentNode: 'B',
+          edgeType: 'type2',
+          siblings: []
+        });
+      });
+    });
+
+    describe('Circular Reference Handling', () => {
+      test('should handle circular references', async () => {
+        // A -> B -> C -> B (circular)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'C', 'link');
+        graph.addEdge('C', 'B', 'link');
+
+        const executedNodes = [];
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          return `result_${nodeId}`;
+        };
+
+        const tree = await graph.executeOnTree('A', callback);
+
+        // B should only be executed once
+        expect(executedNodes).toEqual(['A', 'B', 'C']);
+
+        // Find the circular reference in the tree
+        const nodeC = tree.children[0].children[0];
+        expect(nodeC.node).toBe('C');
+        expect(nodeC.children[0].isCircularRef).toBe(true);
+        expect(nodeC.children[0].node).toBe('B');
+        expect(nodeC.children[0].result).toBe('result_B');
+      });
+    });
+
+    describe('Error Handling', () => {
+      test('should fail-fast on error by default', async () => {
+        // A -> B
+        // A -> C (will throw error)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+
+        const callback = async (nodeId) => {
+          if (nodeId === 'C') {
+            throw new Error('Error in C');
+          }
+          return nodeId;
+        };
+
+        await expect(graph.executeOnTree('A', callback)).rejects.toThrow('Error in C');
+      });
+
+      test('should collect errors when errorStrategy is collect', async () => {
+        // A -> B (will throw error)
+        // A -> C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+
+        const callback = async (nodeId) => {
+          if (nodeId === 'B') {
+            throw new Error('Error in B');
+          }
+          return `result_${nodeId}`;
+        };
+
+        const tree = await graph.executeOnTree('A', callback, { errorStrategy: 'collect' });
+
+        expect(tree.node).toBe('A');
+        expect(tree.result).toBe('result_A');
+        expect(tree.error).toBeNull();
+
+        // Find B and C in children
+        const nodeB = tree.children.find(child => child.node === 'B');
+        const nodeC = tree.children.find(child => child.node === 'C');
+
+        expect(nodeB.error).toBeInstanceOf(Error);
+        expect(nodeB.error.message).toBe('Error in B');
+        expect(nodeB.result).toBeNull();
+
+        expect(nodeC.error).toBeNull();
+        expect(nodeC.result).toBe('result_C');
+      });
+
+      test('should skip children when errorStrategy is skip-children', async () => {
+        // A -> B -> D
+        // A -> C (will throw error) -> E
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'D', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('C', 'E', 'link');
+
+        const executedNodes = [];
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          if (nodeId === 'C') {
+            throw new Error('Error in C');
+          }
+          return `result_${nodeId}`;
+        };
+
+        const tree = await graph.executeOnTree('A', callback, { errorStrategy: 'skip-children' });
+
+        // E should not be executed because C failed
+        expect(executedNodes).toEqual(['A', 'B', 'C', 'D']);
+
+        const nodeC = tree.children.find(child => child.node === 'C');
+        expect(nodeC.error).toBeInstanceOf(Error);
+        expect(nodeC.children).toHaveLength(0);
+
+        const nodeB = tree.children.find(child => child.node === 'B');
+        expect(nodeB.children).toHaveLength(1);
+        expect(nodeB.children[0].node).toBe('D');
+      });
+    });
+
+    describe('Edge Type Filtering', () => {
+      test('should filter by edge type', async () => {
+        // A -> B (type1)
+        // A -> C (type2)
+        // B -> D (type1)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('A', 'C', 'type2');
+        graph.addEdge('B', 'D', 'type1');
+
+        const executedNodes = [];
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback, { edgeTypes: 'type1' });
+
+        // Only A, B, and D should be executed (following type1 edges)
+        expect(executedNodes).toEqual(['A', 'B', 'D']);
+      });
+
+      test('should filter by multiple edge types', async () => {
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('A', 'C', 'type2');
+        graph.addEdge('A', 'D', 'type3');
+
+        const executedNodes = [];
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback, { edgeTypes: ['type1', 'type2'] });
+
+        expect(executedNodes).toContain('A');
+        expect(executedNodes).toContain('B');
+        expect(executedNodes).toContain('C');
+        expect(executedNodes).not.toContain('D');
+      });
+    });
+
+    describe('Direction', () => {
+      test('should traverse in incoming direction', async () => {
+        // B -> A
+        // C -> A
+        const graph = new DependencyGraph();
+        graph.addEdge('B', 'A', 'link');
+        graph.addEdge('C', 'A', 'link');
+
+        const executedNodes = [];
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback, { direction: 'incoming' });
+
+        expect(executedNodes).toContain('A');
+        expect(executedNodes).toContain('B');
+        expect(executedNodes).toContain('C');
+        expect(executedNodes).toHaveLength(3);
+      });
+    });
+
+    describe('Concurrency Limiting', () => {
+      test('should limit concurrent executions', async () => {
+        // A -> B, C, D (3 children)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('A', 'D', 'link');
+
+        let currentConcurrent = 0;
+        let maxConcurrent = 0;
+
+        const callback = async (nodeId) => {
+          currentConcurrent++;
+          maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+          await new Promise(resolve => setTimeout(resolve, 50));
+          currentConcurrent--;
+          return nodeId;
+        };
+
+        await graph.executeOnTree('A', callback, { maxConcurrency: 2 });
+
+        // maxConcurrent should never exceed 2
+        expect(maxConcurrent).toBeLessThanOrEqual(2);
+      });
+    });
+
+    describe('Progress Callback', () => {
+      test('should call onProgress for each node', async () => {
+        // A -> B -> C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'C', 'link');
+
+        const progress = [];
+        const callback = async (nodeId) => `result_${nodeId}`;
+
+        const onProgress = (nodeId, result) => {
+          progress.push({ nodeId, result });
+        };
+
+        await graph.executeOnTree('A', callback, { onProgress });
+
+        expect(progress).toEqual([
+          { nodeId: 'A', result: 'result_A' },
+          { nodeId: 'B', result: 'result_B' },
+          { nodeId: 'C', result: 'result_C' }
+        ]);
+      });
+    });
+
+    describe('Cancellation', () => {
+      test('should abort execution when signal is aborted', async () => {
+        // A -> B -> C -> D
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'C', 'link');
+        graph.addEdge('C', 'D', 'link');
+
+        const controller = new AbortController();
+        const executedNodes = [];
+
+        const callback = async (nodeId) => {
+          executedNodes.push(nodeId);
+          if (nodeId === 'B') {
+            controller.abort();
+          }
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return nodeId;
+        };
+
+        await expect(
+          graph.executeOnTree('A', callback, { signal: controller.signal })
+        ).rejects.toThrow('Execution aborted');
+
+        // Should have executed A and B, but not C or D
+        expect(executedNodes.length).toBeLessThan(4);
+      });
+    });
+
+    describe('Input Validation', () => {
+      test('should throw error if start node does not exist', async () => {
+        const graph = new DependencyGraph();
+        const callback = async (nodeId) => nodeId;
+
+        await expect(
+          graph.executeOnTree('NonExistent', callback)
+        ).rejects.toThrow("Start node 'NonExistent' does not exist");
+      });
+
+      test('should throw error if callback is not a function', async () => {
+        const graph = new DependencyGraph();
+        graph.addNode('A');
+
+        await expect(
+          graph.executeOnTree('A', 'not a function')
+        ).rejects.toThrow('Callback must be a function');
+      });
+    });
+
+    describe('Complex Scenarios', () => {
+      test('should handle complex tree with async operations', async () => {
+        // Simulate a computation graph like spreadsheet cells
+        // A = 10
+        // B = A * 2
+        // C = A + 5
+        // D = B + C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'calc');
+        graph.addEdge('A', 'C', 'calc');
+        graph.addEdge('B', 'D', 'calc');
+        graph.addEdge('C', 'D', 'calc');
+
+        const values = { A: 10 };
+
+        const callback = async (nodeId, parentResult) => {
+          await new Promise(resolve => setTimeout(resolve, 5));
+
+          if (nodeId === 'A') return values.A;
+          if (nodeId === 'B') return parentResult * 2;
+          if (nodeId === 'C') return parentResult + 5;
+          if (nodeId === 'D') {
+            // D has two parents, but we only get one parentResult
+            // In real use case, you'd need to handle this differently
+            return parentResult;
+          }
+        };
+
+        const tree = await graph.executeOnTree('A', callback);
+
+        expect(tree.result).toBe(10);
+        const nodeB = tree.children.find(c => c.node === 'B');
+        const nodeC = tree.children.find(c => c.node === 'C');
+        expect(nodeB.result).toBe(20); // 10 * 2
+        expect(nodeC.result).toBe(15); // 10 + 5
+      });
+    });
+  });
 });
