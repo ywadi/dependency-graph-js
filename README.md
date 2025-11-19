@@ -9,7 +9,8 @@ It is designed to be lightweight, with zero production dependencies, making it e
 - **Dependency Graph:**
   - Create directed graphs with typed edges.
   - Add and remove nodes and edges dynamically.
-  - Traverse the graph in both outgoing (dependencies) and incoming (dependents) directions.
+  - Traverse the graph using breadth-first search (BFS) or depth-first search (DFS).
+  - Support traversal in both outgoing (dependencies) and incoming (dependents) directions.
   - Filter traversal by edge types.
   - Detect and find circular dependencies.
   - Generate graph visualizations using Mermaid.js syntax.
@@ -41,7 +42,11 @@ const graph = new DependencyGraph();
 graph.addEdge('Sheet1!A1', 'Sheet1!B1', 'formula');
 graph.addEdge('Sheet1!A1', 'Sheet1!C1', 'formula');
 
+// Default traversal (BFS)
 console.log('Dependents of A1:', graph.traverse('Sheet1!A1'));
+
+// Using DFS traversal
+console.log('DFS traversal:', graph.traverse('Sheet1!A1', { strategy: 'dfs' }));
 
 // Using the formula parser
 const formula = '=SUM(A1:B5) + C3 - Sheet1!D4';
@@ -122,7 +127,8 @@ Traverses the graph from a starting node.
 - **`options`** (object, optional):
   - `direction` ('outgoing' | 'incoming'): Direction to traverse. Defaults to `'outgoing'`.
   - `edgeTypes` (string | string[]): Edge type(s) to follow. Follows all types if not provided.
-- **Returns**: An array of visited node IDs.
+  - `strategy` ('bfs' | 'dfs'): Traversal strategy. Defaults to `'bfs'` (breadth-first search). Use `'dfs'` for depth-first search.
+- **Returns**: An array of visited node IDs in traversal order.
 
 #### `hasCircularDependency(options)`
 

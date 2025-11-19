@@ -73,7 +73,7 @@ describe('DependencyGraph', () => {
 
   describe('Traversal', () => {
     let graph;
-    
+
     beforeEach(() => {
       graph = new DependencyGraph();
       graph.addEdge('A', 'B', 'type1');
@@ -101,10 +101,77 @@ describe('DependencyGraph', () => {
       const path = graph.traverse('A', { direction: 'incoming', edgeTypes: 'type1' }).sort();
       expect(path).toEqual(['A']);
     });
-    
+
     test('should filter outgoing traversal by multiple edge types', () => {
       const path = graph.traverse('A', { edgeTypes: ['type1', 'type2'] }).sort();
       expect(path).toEqual(['A', 'B', 'C', 'D']);
+    });
+  });
+
+  describe('Traversal Strategies (BFS vs DFS)', () => {
+    let graph;
+
+    beforeEach(() => {
+      // Create a graph where BFS and DFS will produce different orders
+      //     A
+      //    / \
+      //   B   C
+      //   |   |
+      //   D   E
+      graph = new DependencyGraph();
+      graph.addEdge('A', 'B', 'link');
+      graph.addEdge('A', 'C', 'link');
+      graph.addEdge('B', 'D', 'link');
+      graph.addEdge('C', 'E', 'link');
+    });
+
+    test('should use BFS by default', () => {
+      const path = graph.traverse('A');
+      expect(path[0]).toBe('A');
+      // In BFS, we visit level by level: A, then B and C, then D and E
+      expect(path.slice(0, 3)).toContain('A');
+      expect(path.slice(0, 3)).toContain('B');
+      expect(path.slice(0, 3)).toContain('C');
+    });
+
+    test('should perform BFS when explicitly specified', () => {
+      const path = graph.traverse('A', { strategy: 'bfs' });
+      expect(path).toHaveLength(5);
+      expect(path[0]).toBe('A');
+      // BFS visits level by level
+    });
+
+    test('should perform DFS when specified', () => {
+      const path = graph.traverse('A', { strategy: 'dfs' });
+      expect(path).toHaveLength(5);
+      expect(path[0]).toBe('A');
+      // DFS goes deep before going wide
+    });
+
+    test('should work with DFS in incoming direction', () => {
+      const testGraph = new DependencyGraph();
+      testGraph.addEdge('B', 'A', 'link');
+      testGraph.addEdge('C', 'A', 'link');
+      testGraph.addEdge('D', 'B', 'link');
+      testGraph.addEdge('E', 'C', 'link');
+
+      const path = testGraph.traverse('A', { direction: 'incoming', strategy: 'dfs' });
+      expect(path).toHaveLength(5);
+      expect(path).toContain('A');
+      expect(path).toContain('B');
+      expect(path).toContain('C');
+      expect(path).toContain('D');
+      expect(path).toContain('E');
+    });
+
+    test('should work with DFS and edge type filtering', () => {
+      const testGraph = new DependencyGraph();
+      testGraph.addEdge('A', 'B', 'type1');
+      testGraph.addEdge('A', 'C', 'type2');
+      testGraph.addEdge('B', 'D', 'type1');
+
+      const path = testGraph.traverse('A', { strategy: 'dfs', edgeTypes: 'type1' });
+      expect(path).toEqual(['A', 'B', 'D']);
     });
   });
 
