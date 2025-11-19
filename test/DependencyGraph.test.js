@@ -287,4 +287,274 @@ describe('DependencyGraph', () => {
       expect(deserializedGraph.getDependents('A', { edgeTypes: 'type2' })).toEqual(['C']);
     });
   });
+
+  describe('Tree Building (getTree)', () => {
+    describe('Basic Tree Structure', () => {
+      test('should build a basic outgoing tree', () => {
+        // A -> B -> D
+        // A -> C
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('B', 'D', 'link');
+
+        const tree = graph.getTree('A');
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'D',
+                  children: []
+                }
+              ]
+            },
+            {
+              node: 'C',
+              children: []
+            }
+          ]
+        });
+      });
+
+      test('should build a basic incoming tree', () => {
+        // B -> A
+        // C -> A
+        // D -> B
+        const graph = new DependencyGraph();
+        graph.addEdge('B', 'A', 'link');
+        graph.addEdge('C', 'A', 'link');
+        graph.addEdge('D', 'B', 'link');
+
+        const tree = graph.getTree('A', { direction: 'incoming' });
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'D',
+                  children: []
+                }
+              ]
+            },
+            {
+              node: 'C',
+              children: []
+            }
+          ]
+        });
+      });
+
+      test('should return a leaf node with empty children', () => {
+        const graph = new DependencyGraph();
+        graph.addNode('A');
+
+        const tree = graph.getTree('A');
+        expect(tree).toEqual({
+          node: 'A',
+          children: []
+        });
+      });
+
+      test('should return null for non-existent start node', () => {
+        const graph = new DependencyGraph();
+        const tree = graph.getTree('NonExistent');
+        expect(tree).toBeNull();
+      });
+    });
+
+    describe('Edge Type Filtering', () => {
+      test('should filter tree by single edge type', () => {
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('A', 'C', 'type2');
+        graph.addEdge('B', 'D', 'type1');
+
+        const tree = graph.getTree('A', { edgeTypes: 'type1' });
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'D',
+                  children: []
+                }
+              ]
+            }
+          ]
+        });
+      });
+
+      test('should filter tree by multiple edge types', () => {
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('A', 'C', 'type2');
+        graph.addEdge('B', 'D', 'type3');
+        graph.addEdge('C', 'E', 'type2');
+
+        const tree = graph.getTree('A', { edgeTypes: ['type1', 'type2'] });
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: []
+            },
+            {
+              node: 'C',
+              children: [
+                {
+                  node: 'E',
+                  children: []
+                }
+              ]
+            }
+          ]
+        });
+      });
+    });
+
+    describe('Cycle Handling', () => {
+      test('should stop at already visited nodes (prevent cycles)', () => {
+        // A -> B -> C -> A (cycle)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('B', 'C', 'link');
+        graph.addEdge('C', 'A', 'link');
+
+        const tree = graph.getTree('A');
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'C',
+                  children: [] // Stops here, doesn't go back to A
+                }
+              ]
+            }
+          ]
+        });
+      });
+
+      test('should prevent duplicate nodes when multiple paths lead to same node', () => {
+        // A -> B -> D
+        // A -> C -> D (D is reachable via two paths)
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('B', 'D', 'link');
+        graph.addEdge('C', 'D', 'link');
+
+        const tree = graph.getTree('A');
+
+        // D should only appear once (in the first path encountered)
+        expect(tree.node).toBe('A');
+        expect(tree.children).toHaveLength(2);
+
+        // One of the branches should have D, the other shouldn't
+        const hasD = tree.children.some(child =>
+          child.children.some(grandchild => grandchild.node === 'D')
+        );
+        expect(hasD).toBe(true);
+
+        // Count total occurrences of D in the entire tree
+        const countNodeOccurrences = (node, target) => {
+          let count = node.node === target ? 1 : 0;
+          for (const child of node.children) {
+            count += countNodeOccurrences(child, target);
+          }
+          return count;
+        };
+        expect(countNodeOccurrences(tree, 'D')).toBe(1);
+      });
+    });
+
+    describe('Complex Tree Structures', () => {
+      test('should build a deep tree with multiple branches', () => {
+        // A -> B -> D -> F
+        // A -> C -> E -> G
+        //           E -> H
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'link');
+        graph.addEdge('A', 'C', 'link');
+        graph.addEdge('B', 'D', 'link');
+        graph.addEdge('C', 'E', 'link');
+        graph.addEdge('D', 'F', 'link');
+        graph.addEdge('E', 'G', 'link');
+        graph.addEdge('E', 'H', 'link');
+
+        const tree = graph.getTree('A');
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'D',
+                  children: [
+                    {
+                      node: 'F',
+                      children: []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              node: 'C',
+              children: [
+                {
+                  node: 'E',
+                  children: [
+                    {
+                      node: 'G',
+                      children: []
+                    },
+                    {
+                      node: 'H',
+                      children: []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        });
+      });
+
+      test('should work with incoming direction and edge type filtering', () => {
+        const graph = new DependencyGraph();
+        graph.addEdge('B', 'A', 'type1');
+        graph.addEdge('C', 'A', 'type2');
+        graph.addEdge('D', 'B', 'type1');
+        graph.addEdge('E', 'C', 'type2');
+
+        const tree = graph.getTree('A', { direction: 'incoming', edgeTypes: 'type1' });
+        expect(tree).toEqual({
+          node: 'A',
+          children: [
+            {
+              node: 'B',
+              children: [
+                {
+                  node: 'D',
+                  children: []
+                }
+              ]
+            }
+          ]
+        });
+      });
+    });
+  });
 });

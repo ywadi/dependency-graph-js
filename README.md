@@ -10,6 +10,7 @@ It is designed to be lightweight, with zero production dependencies, making it e
   - Create directed graphs with typed edges.
   - Add and remove nodes and edges dynamically.
   - Traverse the graph using breadth-first search (BFS) or depth-first search (DFS).
+  - Build hierarchical tree structures representing graph relationships.
   - Support traversal in both outgoing (dependencies) and incoming (dependents) directions.
   - Filter traversal by edge types.
   - Detect and find circular dependencies.
@@ -129,6 +130,61 @@ Traverses the graph from a starting node.
   - `edgeTypes` (string | string[]): Edge type(s) to follow. Follows all types if not provided.
   - `strategy` ('bfs' | 'dfs'): Traversal strategy. Defaults to `'bfs'` (breadth-first search). Use `'dfs'` for depth-first search.
 - **Returns**: An array of visited node IDs in traversal order.
+
+#### `getTree(startNodeId, options)`
+
+Builds a hierarchical tree structure starting from a given node.
+
+- **`startNodeId`** (string): The node to start from.
+- **`options`** (object, optional):
+  - `direction` ('outgoing' | 'incoming'): Direction to traverse. Defaults to `'outgoing'`.
+  - `edgeTypes` (string | string[]): Edge type(s) to follow. Follows all types if not provided.
+- **Returns**: A tree object with `{node: string, children: Array}` structure, or `null` if the start node doesn't exist.
+
+**Example:**
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('A', 'B', 'link');
+graph.addEdge('A', 'C', 'link');
+graph.addEdge('B', 'D', 'link');
+graph.addEdge('C', 'E', 'link');
+
+const tree = graph.getTree('A');
+console.log(JSON.stringify(tree, null, 2));
+/*
+Output:
+{
+  "node": "A",
+  "children": [
+    {
+      "node": "B",
+      "children": [
+        {
+          "node": "D",
+          "children": []
+        }
+      ]
+    },
+    {
+      "node": "C",
+      "children": [
+        {
+          "node": "E",
+          "children": []
+        }
+      ]
+    }
+  ]
+}
+*/
+
+// Get tree in incoming direction (dependents)
+const dependentsTree = graph.getTree('D', { direction: 'incoming' });
+
+// Filter by edge type
+const filteredTree = graph.getTree('A', { edgeTypes: 'formula' });
+```
 
 #### `hasCircularDependency(options)`
 
