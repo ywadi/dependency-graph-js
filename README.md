@@ -323,6 +323,39 @@ const tree = await graph.executeOnTree('root',
 );
 ```
 
+**Example 6: Different behavior based on edge type**
+
+When a node is reached via different paths with different edge types, the callback is executed once for each unique edge type. This allows your callback to behave differently depending on how the node was reached:
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('A', 'B', 'type1');
+graph.addEdge('A', 'C', 'type2');
+graph.addEdge('B', 'D', 'type1');  // D reached via type1
+graph.addEdge('C', 'D', 'type2');  // D reached via type2 (different type!)
+
+const tree = await graph.executeOnTree('A', async (nodeId, parentResult, context) => {
+  // context.edgeType tells you which edge type was used to reach this node
+  if (context.edgeType === 'type1') {
+    console.log(`${nodeId} reached via type1 - processing as formula`);
+    return processAsFormula(nodeId);
+  } else if (context.edgeType === 'type2') {
+    console.log(`${nodeId} reached via type2 - processing as reference`);
+    return processAsReference(nodeId);
+  }
+  return nodeId;
+});
+
+// Output:
+// A reached via null (root node)
+// B reached via type1 - processing as formula
+// C reached via type2 - processing as reference
+// D reached via type1 - processing as formula
+// D reached via type2 - processing as reference (executed again!)
+```
+
+**Note**: Nodes are only considered duplicates if they're reached via the **same** edge type. If a node is reached multiple times but through different edge types, the callback will execute for each unique edge type. This allows you to handle the same node differently based on the type of relationship used to reach it.
+
 #### `hasCircularDependency(options)`
 
 Checks if the graph contains any circular dependencies.

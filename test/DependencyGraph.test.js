@@ -674,6 +674,68 @@ describe('DependencyGraph', () => {
         expect(nodeC.children[0].node).toBe('B');
         expect(nodeC.children[0].result).toBe('result_B');
       });
+
+      test('should execute node multiple times when reached via different edge types', async () => {
+        // A --type1--> B --type1--> D
+        // A --type2--> C --type2--> D
+        // This tests that D is executed twice, once via type1 edge and once via type2 edge
+        const graph = new DependencyGraph();
+        graph.addEdge('A', 'B', 'type1');
+        graph.addEdge('A', 'C', 'type2');
+        graph.addEdge('B', 'D', 'type1');
+        graph.addEdge('C', 'D', 'type2');
+
+        const executions = [];
+        const callback = async (nodeId, parentResult, context) => {
+          executions.push({ nodeId, edgeType: context.edgeType });
+
+          // Callback can behave differently based on edge type
+          if (context.edgeType === 'type1') {
+            return `${nodeId}_via_type1`;
+          } else if (context.edgeType === 'type2') {
+            return `${nodeId}_via_type2`;
+          }
+          return nodeId;
+        };
+
+        const tree = await graph.executeOnTree('A', callback);
+
+        // A should execute once (no edge type for root)
+        // B and C should execute once each
+        // D should execute twice (once for type1 from B, once for type2 from C)
+        expect(executions).toHaveLength(5);
+        expect(executions[0]).toEqual({ nodeId: 'A', edgeType: null });
+
+        // D should be executed twice with different edge types
+        const dExecutions = executions.filter(e => e.nodeId === 'D');
+        expect(dExecutions).toHaveLength(2);
+        expect(dExecutions).toEqual(
+          expect.arrayContaining([
+            { nodeId: 'D', edgeType: 'type1' },
+            { nodeId: 'D', edgeType: 'type2' }
+          ])
+        );
+
+        // Verify the tree structure
+        expect(tree.children).toHaveLength(2);
+
+        // Find B and C nodes
+        const nodeB = tree.children.find(c => c.node === 'B');
+        const nodeC = tree.children.find(c => c.node === 'C');
+
+        expect(nodeB).toBeDefined();
+        expect(nodeC).toBeDefined();
+
+        // Each should have D as a child
+        expect(nodeB.children).toHaveLength(1);
+        expect(nodeC.children).toHaveLength(1);
+        expect(nodeB.children[0].node).toBe('D');
+        expect(nodeC.children[0].node).toBe('D');
+
+        // Results should reflect the different edge types
+        expect(nodeB.children[0].result).toBe('D_via_type1');
+        expect(nodeC.children[0].result).toBe('D_via_type2');
+      });
     });
 
     describe('Error Handling', () => {
