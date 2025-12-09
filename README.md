@@ -44,6 +44,10 @@ const graph = new DependencyGraph();
 graph.addEdge('Sheet1!A1', 'Sheet1!B1', 'formula');
 graph.addEdge('Sheet1!A1', 'Sheet1!C1', 'formula');
 
+// Adding edges with metadata
+graph.addEdge('A', 'B', 'weighted', { weight: 5, priority: 'high' });
+graph.addEdge('B', 'C', 'weighted', { weight: 10, priority: 'low' });
+
 // Default traversal (BFS)
 console.log('Dependents of A1:', graph.traverse('Sheet1!A1'));
 
@@ -89,6 +93,7 @@ Adds a directed edge between two nodes. If nodes do not exist, they are created 
 - **`fromNodeId`** (string): The starting node ID.
 - **`toNodeId`** (string): The ending node ID.
 - **`type`** (string): The type of the dependency (e.g., 'formula', 'link').
+- **`data`** (any, optional): Optional data to store with the edge (e.g., `{ weight: 5 }`). Defaults to `{}`.
 
 #### `removeEdge(fromNodeId, toNodeId)`
 
@@ -201,7 +206,7 @@ This is particularly useful for:
 - **`callback`** (async function): Async function called for each node: `(nodeId, parentResult, context) => result`
   - `nodeId` (string): The current node ID
   - `parentResult` (any): The value returned by the parent node's callback (null for root)
-  - `context` (object): Contains `{ depth, path, parentNode, edgeType, siblings }`
+  - `context` (object): Contains `{ depth, path, parentNode, edgeType, edgeData, siblings }`
   - Returns: Any value that will be passed to children as `parentResult`
 - **`options`** (object, optional):
   - `direction` ('outgoing' | 'incoming'): Direction to traverse. Defaults to `'outgoing'`.
@@ -323,7 +328,32 @@ const tree = await graph.executeOnTree('root',
 );
 ```
 
-**Example 6: Different behavior based on edge type**
+**Example 6: Using edge data in callbacks**
+
+You can attach metadata to edges and access it in your callbacks via `context.edgeData`:
+
+```javascript
+const graph = new DependencyGraph();
+graph.addEdge('A', 'B', 'weighted', { weight: 5, cost: 100 });
+graph.addEdge('A', 'C', 'weighted', { weight: 3, cost: 50 });
+graph.addEdge('B', 'D', 'weighted', { weight: 2, cost: 25 });
+
+const tree = await graph.executeOnTree('A', async (nodeId, parentResult, context) => {
+  // Access edge metadata through context.edgeData
+  if (context.edgeData) {
+    console.log(`${nodeId} - weight: ${context.edgeData.weight}, cost: ${context.edgeData.cost}`);
+    return (parentResult || 0) + context.edgeData.weight;
+  }
+  return 0; // Root node
+});
+
+// Output:
+// B - weight: 5, cost: 100
+// C - weight: 3, cost: 50
+// D - weight: 2, cost: 25
+```
+
+**Example 7: Different behavior based on edge type**
 
 When a node is reached via different paths with different edge types, the callback is executed once for each unique edge type. This allows your callback to behave differently depending on how the node was reached:
 
