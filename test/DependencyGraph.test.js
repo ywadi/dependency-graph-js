@@ -69,6 +69,13 @@ describe('DependencyGraph', () => {
       graph.addNode('B');
       expect(graph.removeEdge('A', 'B')).toBe(false);
     });
+
+    test('should add an edge with data', () => {
+      const graph = new DependencyGraph();
+      const data = { weight: 5 };
+      graph.addEdge('A', 'B', 'equational', data);
+      expect(graph.edges.get('A->B').data).toEqual(data);
+    });
   });
 
   describe('Traversal', () => {
@@ -618,8 +625,8 @@ describe('DependencyGraph', () => {
       test('should pass context information correctly', async () => {
         // A -> B -> C
         const graph = new DependencyGraph();
-        graph.addEdge('A', 'B', 'type1');
-        graph.addEdge('B', 'C', 'type2');
+        graph.addEdge('A', 'B', 'type1', { weight: 10 });
+        graph.addEdge('B', 'C', 'type2', { weight: 20 });
 
         let contextB, contextC;
         const callback = async (nodeId, parentResult, context) => {
@@ -635,6 +642,7 @@ describe('DependencyGraph', () => {
           path: ['A'],
           parentNode: 'A',
           edgeType: 'type1',
+          edgeData: { weight: 10 },
           siblings: []
         });
 
@@ -643,6 +651,7 @@ describe('DependencyGraph', () => {
           path: ['A', 'B'],
           parentNode: 'B',
           edgeType: 'type2',
+          edgeData: { weight: 20 },
           siblings: []
         });
       });
